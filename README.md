@@ -1,5 +1,7 @@
 # Haskell Sokoban Game
 
-Simple but effective Sokoban, may be run on code.world/haskell page
-
+Simple but effective Sokoban, may be run on page 
+```
+code.world/haskell
+```
 
