@@ -230,8 +230,6 @@ walk3 = runInteraction (resettable initInteraction)
 
 
 walk4 :: IO()
-walk4 = runInteraction (withStartScreen (resettable initInteraction))
+walk4 = runInteraction (resettable (withStartScreen initInteraction))
 
 main = walk4
-
-
