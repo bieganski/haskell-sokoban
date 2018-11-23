@@ -24,22 +24,18 @@ drawTile Storage = storage_pict
 drawTile Box     = box_pict
 drawTile Blank   = blank_pict
 
-data Coord = C Integer Integer deriving (Show, Eq)
+data Coord = C Integer Integer deriving Eq
 
 atCoord :: Coord -> Picture -> Picture
 atCoord (C x y) pic = translated (fromIntegral x) (fromIntegral y) pic
 
-data Direction = R | U | L | D deriving Show
+data Direction = R | U | L | D
 
-shiftCoords :: Direction -> Coord -> Coord
-shiftCoords U (C x y) = C x (y+1)
-shiftCoords D (C x y) = C x (y-1)
-shiftCoords R (C x y) = C (x+1) y
-shiftCoords L (C x y) = C (x-1) y
-
-moveCoords :: [Direction] -> Coord -> Coord
-moveCoords (el:list) (C x y) = shiftCoords el cc where cc = moveCoords list (C x y)
-moveCoords _ c = c
+nextPos :: Coord -> Direction -> Coord
+nextPos (C x y) U = C x (y + 1)
+nextPos (C x y) R = (x + 1) y
+nextPos (C x y) D = C x (y - 1)
+nextPos (C x y) R = (x - 1) y
 
 maze :: Coord -> Tile
 maze (C x y)
@@ -62,10 +58,11 @@ player2 U = player1
 data State = S Coord Direction [Coord] deriving Show
 
 boxes :: [Coord]
+init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
 boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
-
+-- TODO 
 initialState :: State
-initialState = S (C 1 (-2)) L boxes 
+initialState = S (C 1 (-2)) L init_boxes
 
 type Maze = Coord -> Tile
 
@@ -85,16 +82,38 @@ draw :: State -> Picture
 draw (S c d cc) = pictures([drawMaze (addBoxes boxes (removeBoxes maze))] ++ [player2 d])
 
 
+permittedMove :: State -> Direction -> Bool
+permittedMove (S c pl_d cc) d
+    | nextPos c d elem cc = maze (nextPos (nextPos c d) d) elem [Storage, Ground]
+    | nextPos c d == Storage = True
+    | nextPos c d == Ground = True
+    | otherwise False
+
+
+makeMove :: State -> Direction -> State
+makeMove (S c pl_d cc) d
+    | not permittedMove (S c pl_d cc) d = (S c d cc)
+    | nextPos c d elem cc = 
+      S (nextPos c d) d ([el | el <- cc, el != (nextPos c d)] ++ [(nextPos (nextPos c d) d)])
+    | nextPos c d == Storage = S (nextPos c d) d cc
+    | nextPos c d == Ground = S (nextPos c d) d cc
+    | otherwise (S c d cc)
+
 handleEvent :: Event -> State -> State
-handleEvent (KeyPress key) c
-    | key == "Up" = if permittedPos (shiftCoords U c) then shiftCoords U c else c
-    | key == "Down" = if permittedPos (shiftCoords D c) then shiftCoords D c else c
-    | key == "Right" = if permittedPos (shiftCoords R c) then shiftCoords R c else c
-    | key == "Left" = if permittedPos (shiftCoords L c) then shiftCoords L c else c
-handleEvent1 _ c = c
+handleEvent (KeyPress key) s
+    | key == "Up" = makeMove s U
+    | key == "Down" = makeMove s D
+    | key == "Right" = makeMove s R
+    | key == "Left" = makeMove s L
+handleEvent _ c = c
 
 
+handleTime :: Double -> world -> world
+handleTime _ w = w
 
-main = drawingOf (draw initialState)
+
+main = interactionOf initialState handleTime handleEvent draw
+
+
 
 
