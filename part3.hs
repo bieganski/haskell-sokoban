@@ -140,6 +140,10 @@ startScreen :: Picture
 startScreen = pictures [scaled 3 3 (lettering "Sokoban!"), 
     translated 0 (-3) (lettering "press 'Space' to start game!")]
 
+winScreen :: Picture
+winScreen = pictures [scaled 3 3 (lettering "You win!"), 
+    translated 0 (-3) (lettering "congratulations!")]
+
 
 data Interaction world = Interaction
     world
@@ -170,13 +174,20 @@ withStartScreen (Interaction state0 step handle draw)
     handle' e              (Running s) = Running (handle e s)
 
     draw' StartScreen = startScreen
-    draw' (Running s) = draw s
-    
+    draw' (Running s) = if isWinning state0 then winScreen else draw s
 
 runInteraction :: Interaction s -> IO ()
 runInteraction (Interaction w t e d) = interactionOf w t e d
 
 initInteraction = Interaction initialState handleTime handleEvent draw
-    
+
+
+
+
+
+isWinning :: State -> Bool
+isWinning (S c d cc) = all (==Storage) (map (maze) cc)
+
+
 main = runInteraction (resettable (withStartScreen initInteraction))
 
