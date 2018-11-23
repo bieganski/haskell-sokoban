@@ -55,7 +55,7 @@ player2 R = rotated (3*pi/2) player1
 player2 L = rotated (pi/2) player1
 player2 U = player1
 
-data State = S Coord Direction [Coord] 
+data State = S Coord Direction [Coord]
 
 _init_boxes :: [Coord]
 _init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
@@ -134,14 +134,49 @@ enhancedHandleEvent :: world -> (Event -> world -> world) -> (Event -> world -> 
 enhancedHandleEvent w e_func e act_w = if e == (KeyPress "Esc") then w else e_func e act_w
 
 
-startScreenInteractionOf ::
-    world -> 
-    (Double -> world -> world) ->
-    (Event -> world -> world) -> 
-    (world -> Picture) ->
-    IO ()
-    
-startScreenInteractionOf w t_func e_func d_func = 
+data GameState world = StartScreen | Running world
 
-main = resettableInteractionOf initialState handleTime handleEvent draw
+startScreen :: Picture
+startScreen = pictures [scaled 3 3 (lettering "Sokoban!"), 
+    translated 0 (-3) (lettering "press 'Space' to start game!")]
+
+
+data Interaction world = Interaction
+    world
+	(Double -> world -> world)
+	(Event -> world -> world)
+	(world -> Picture)
+
+
+resettable :: Interaction s -> Interaction s
+resettable (Interaction state0 step handle draw)
+  = Interaction state0 step _handle draw
+    where _handle (KeyPress "Esc") _ = state0
+          _handle e s = handle e s
+
+
+withStartScreen :: Interaction s -> Interaction (GameState s)
+withStartScreen (Interaction state0 step handle draw)
+  = Interaction state0' step' handle' draw'
+  where
+    state0' = StartScreen
+
+    step' _ StartScreen = StartScreen
+    step' t (Running s) = Running (step t s)
+
+    handle' (KeyPress key) StartScreen
+         | key == " "                  = Running state0
+    handle' _              StartScreen = StartScreen
+    handle' e              (Running s) = Running (handle e s)
+
+    draw' StartScreen = startScreen
+    draw' (Running s) = draw s
+    
+
+runInteraction :: Interaction s -> IO ()
+runInteraction (Interaction w t e d) = interactionOf w t e d
+
+initInteraction = Interaction initialState handleTime handleEvent draw
+    
+main = runInteraction (resettable (withStartScreen initInteraction))
 
