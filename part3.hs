@@ -24,18 +24,18 @@ drawTile Storage = storage_pict
 drawTile Box     = box_pict
 drawTile Blank   = blank_pict
 
-data Coord = C Integer Integer deriving Eq
+data Coord = C Integer Integer deriving (Eq, Show)
 
 atCoord :: Coord -> Picture -> Picture
 atCoord (C x y) pic = translated (fromIntegral x) (fromIntegral y) pic
 
-data Direction = R | U | L | D
+data Direction = R | U | L | D deriving (Eq, Show)
 
 nextPos :: Coord -> Direction -> Coord
 nextPos (C x y) U = C x (y + 1)
-nextPos (C x y) R = (x + 1) y
 nextPos (C x y) D = C x (y - 1)
-nextPos (C x y) R = (x - 1) y
+nextPos (C x y) R = C (x + 1) y
+nextPos (C x y) L = C (x - 1) y
 
 maze :: Coord -> Tile
 maze (C x y)
@@ -55,7 +55,7 @@ player2 D = rotated (3*pi/2) player1
 player2 L = rotated (pi/2) player1
 player2 U = player1
 
-data State = S Coord Direction [Coord] deriving Show
+data State = S Coord Direction [Coord] 
 
 boxes :: [Coord]
 init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
@@ -79,25 +79,23 @@ drawMaze m = pictures ([atCoord (C x y) (drawTile (m (C x y)))
 
 
 draw :: State -> Picture
-draw (S c d cc) = pictures([drawMaze (addBoxes boxes (removeBoxes maze))] ++ [player2 d])
+draw (S (C x y) d cc) = pictures([translated (fromIntegral x) (fromIntegral y) (player2 d)] ++ [drawMaze (addBoxes boxes (removeBoxes maze))])
 
 
 permittedMove :: State -> Direction -> Bool
 permittedMove (S c pl_d cc) d
-    | nextPos c d elem cc = maze (nextPos (nextPos c d) d) elem [Storage, Ground]
-    | nextPos c d == Storage = True
-    | nextPos c d == Ground = True
-    | otherwise False
+    | elem (nextPos c d) cc = if elem (maze (nextPos (nextPos c d) d)) [Storage, Ground] then True else False
+    | elem (maze (nextPos c d)) [Storage, Ground] = True
+    | otherwise = False
 
 
 makeMove :: State -> Direction -> State
 makeMove (S c pl_d cc) d
-    | not permittedMove (S c pl_d cc) d = (S c d cc)
-    | nextPos c d elem cc = 
-      S (nextPos c d) d ([el | el <- cc, el != (nextPos c d)] ++ [(nextPos (nextPos c d) d)])
-    | nextPos c d == Storage = S (nextPos c d) d cc
-    | nextPos c d == Ground = S (nextPos c d) d cc
-    | otherwise (S c d cc)
+    | not (permittedMove (S c pl_d cc) d) = S c d cc
+    | elem (nextPos c d) cc = S (nextPos c d) d ([el | el <- cc, el /= (nextPos c d)] ++ [(nextPos (nextPos c d) d)])
+    | elem (maze (nextPos c d)) [Storage, Ground] = S (nextPos c d) d cc
+    | otherwise = S c d cc
+
 
 handleEvent :: Event -> State -> State
 handleEvent (KeyPress key) s
@@ -105,7 +103,7 @@ handleEvent (KeyPress key) s
     | key == "Down" = makeMove s D
     | key == "Right" = makeMove s R
     | key == "Left" = makeMove s L
-handleEvent _ c = c
+handleEvent _ s = s
 
 
 handleTime :: Double -> world -> world
@@ -113,7 +111,5 @@ handleTime _ w = w
 
 
 main = interactionOf initialState handleTime handleEvent draw
-
-
 
 
