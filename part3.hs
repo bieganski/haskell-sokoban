@@ -50,27 +50,32 @@ player1 :: Picture
 player1 = colored (violet) (solidPolygon [(0.0, 0.5), (-0.4, -0.40), (0.4, -0.40)])
 
 player2 :: Direction -> Picture
-player2 R = rotated  pi player1
-player2 D = rotated (3*pi/2) player1
+player2 D = rotated  pi player1
+player2 R = rotated (3*pi/2) player1
 player2 L = rotated (pi/2) player1
 player2 U = player1
 
 data State = S Coord Direction [Coord] 
 
-boxes :: [Coord]
-init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
-boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
--- TODO 
+_init_boxes :: [Coord]
+_init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
+
 initialState :: State
-initialState = S (C 1 (-2)) L init_boxes
+initialState = S (C 1 (-2)) L _init_boxes
+
 
 type Maze = Coord -> Tile
 
 removeBoxes :: Maze -> Coord -> Tile
 removeBoxes m = f . m where f = \t -> if t == Box then Ground else t
 
+
 addBoxes :: [Coord] -> Maze -> Maze
 addBoxes l m c = (f . m) c where f = if elem c l then \t -> Box else id
+
+
+actualMaze :: State -> Maze -> Maze
+actualMaze (S c d cc) m = addBoxes cc (removeBoxes m)
 
 
 drawMaze :: Maze -> Picture
@@ -79,23 +84,28 @@ drawMaze m = pictures ([atCoord (C x y) (drawTile (m (C x y)))
 
 
 draw :: State -> Picture
-draw (S (C x y) d cc) = pictures([translated (fromIntegral x) (fromIntegral y) (player2 d)] ++ [drawMaze (addBoxes boxes (removeBoxes maze))])
+draw (S (C x y) d cc) = pictures(
+  [translated (fromIntegral x) (fromIntegral y) (player2 d)] 
+  ++ [drawMaze (actualMaze (S (C x y) d cc) maze)])
 
 
 permittedMove :: State -> Direction -> Bool
 permittedMove (S c pl_d cc) d
-    | elem (nextPos c d) cc = if elem (maze (nextPos (nextPos c d) d)) [Storage, Ground] then True else False
-    | elem (maze (nextPos c d)) [Storage, Ground] = True
+    | elem (nextPos c d) cc = 
+        if elem (actMaze  (nextPos (nextPos c d) d)) [Storage, Ground] 
+        then True else False
+    | elem (actMaze (nextPos c d)) [Storage, Ground] = True
     | otherwise = False
+    where actMaze = actualMaze (S c pl_d cc) maze
 
 
 makeMove :: State -> Direction -> State
 makeMove (S c pl_d cc) d
     | not (permittedMove (S c pl_d cc) d) = S c d cc
     | elem (nextPos c d) cc = S (nextPos c d) d ([el | el <- cc, el /= (nextPos c d)] ++ [(nextPos (nextPos c d) d)])
-    | elem (maze (nextPos c d)) [Storage, Ground] = S (nextPos c d) d cc
+    | elem (actMaze (nextPos c d)) [Storage, Ground] = S (nextPos c d) d cc
     | otherwise = S c d cc
-
+    where actMaze = actualMaze (S c pl_d cc) maze
 
 handleEvent :: Event -> State -> State
 handleEvent (KeyPress key) s
@@ -109,7 +119,29 @@ handleEvent _ s = s
 handleTime :: Double -> world -> world
 handleTime _ w = w
 
+resettableInteractionOf ::
+    world ->
+    (Double -> world -> world) ->
+    (Event -> world -> world) ->
+    (world -> Picture) ->
+    IO ()
 
-main = interactionOf initialState handleTime handleEvent draw
+resettableInteractionOf w t_func e_func d_func = 
+  interactionOf w t_func e_func' d_func
+  where e_func' = enhancedHandleEvent w e_func
 
+enhancedHandleEvent :: world -> (Event -> world -> world) -> (Event -> world -> world)
+enhancedHandleEvent w e_func e act_w = if e == (KeyPress "Esc") then w else e_func e act_w
+
+
+startScreenInteractionOf ::
+    world -> 
+    (Double -> world -> world) ->
+    (Event -> world -> world) -> 
+    (world -> Picture) ->
+    IO ()
+    
+startScreenInteractionOf w t_func e_func d_func = 
+
+main = resettableInteractionOf initialState handleTime handleEvent draw
 
