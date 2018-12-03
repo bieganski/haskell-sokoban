@@ -37,14 +37,105 @@ nextPos (C x y) D = C x (y - 1)
 nextPos (C x y) R = C (x + 1) y
 nextPos (C x y) L = C (x - 1) y
 
-maze :: Coord -> Tile
-maze (C x y)
-  | abs x > 4  || abs y > 4  = Blank
-  | abs x == 4 || abs y == 4 = Wall
-  | x ==  2 && y <= 0        = Wall
-  | x ==  3 && y <= 0        = Storage
-  | x >= -2 && y == 0        = Box
-  | otherwise                = Ground
+
+data Maze = Maze Coord (Coord -> Tile) 
+
+properMaze1 :: Maze
+properMaze1 = Maze start fun where
+  start = C 1 (-2)
+  fun (C x y)
+    | abs x > 4  || abs y > 4  = Blank
+    | abs x == 4 || abs y == 4 = Wall
+    | x ==  2 && y <= 0        = Wall
+    | x ==  3 && y <= 0        = Storage
+    | x >= -2 && y == 0        = Box
+    | otherwise                = Ground
+
+
+properMaze2 :: Maze
+properMaze2 = Maze start fun where
+  start = C (-3) 0
+  fun (C x y)
+   | elem x [(-1), 1, 3] && y == 0       = Box
+   | x == 2 && elem y [1, 2, 3]          = Storage
+   | abs x > 5  || y > 4 || y < (-3)     = Blank
+   | x < 1 && y > 1                      = Blank
+   | x > 3 && y < (-1)                   = Blank
+   | x <= 1 && y >= 1                    = Wall
+   | x >= 3 && y <= (-1)                 = Wall
+   | x <= 1 && y >= 1                    = Wall
+   | y == 4 || y == (-3)                 = Wall
+   | abs x == 5                          = Wall
+   | y == (-1) && elem x [(-3), (-1), 1] = Wall
+   | x == 3 && elem y [1, 2]             = Wall
+   | otherwise                           = Ground
+    
+
+badMaze1 :: Maze
+badMaze1 = Maze start fun where
+  start = C 1 (-2)
+  fun (C x y)
+    | abs x > 4  || abs y > 4  = Blank
+    | abs x == 4 || abs y == 4 = Wall
+    | x ==  2 && y <= 0        = Wall
+    | x ==  3 && y <= 0        = Storage
+    | x >= -2 && y == 0        = Box
+    | x == 3 &&  y == 1        = Wall
+    | otherwise                = Ground
+    
+    
+badMaze2 :: Maze
+badMaze2 = Maze start fun where
+  start = C (-4) 2
+  fun (C x y)
+    | abs x > 3  || abs y > 3  = Blank
+    | x <= 0 && y <= 0         = Blank
+    | x <= 1 && y <= 1         = Wall
+    | abs x == 3 || abs y == 3 = Wall
+    | x == 2 && y == 0         = Storage
+    | x == 2 && y == (-2)      = Box
+    | otherwise = Ground
+    
+    
+mazes :: [Maze]
+mazes = [properMaze1, properMaze2]
+
+badMazes :: [Maze]
+badMazes = [badMaze1, badMaze2]
+
+elemList :: Eq a => a -> [a] -> Bool
+elemList el lst = any (==True) (map (==el) lst)
+
+appendList :: [a] -> [a] -> [a]
+appendList l1 l2 = foldList (\el lst -> el:lst) l2 l1
+
+listLength :: [a] -> Integer
+listLength [] = 0
+listLength (x:xs) = 1 + (listLength xs)
+
+filterList :: (a -> Bool) -> [a] -> [a]
+filterList fun lst = foldList (\x l -> if fun x then x:l else l) [] lst
+
+nth :: [a] -> Integer -> a
+nth [] _ = error "out of range"
+nth (x:xs) n 
+  | n == 0 = x
+  | otherwise = nth xs (n - 1)
+
+mapList :: (a -> b) -> [a] -> [b]
+mapList fun lst = foldList (\x l -> (fun x):l) [] lst
+
+andList :: [Bool] -> Bool
+andList lst = foldList (\x val -> x && val) True lst
+
+allList :: (a -> Bool) -> [a] -> Bool
+allList fun lst = andList (mapList fun lst)
+
+foldList :: (a -> b -> b) -> b -> [a] -> b
+foldList fun startWith (x:xs) = fun x (foldList fun startWith xs)
+foldList _ startWith [] = startWith
+
+
 
 
 player1 :: Picture
