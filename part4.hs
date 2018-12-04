@@ -167,15 +167,17 @@ foldList _ startWith [] = startWith
 
 -- edit -------------------------------------- EDIIIIIIT
 
--- with repeatings
+
 reachableList :: Eq a => a -> (a -> [a]) -> [a]
-reachableList initial neighbours = 
- initial : (foldList (\l1 l2 -> l1 ++ l2) [] [reachableList v neighbours' | v <- (neighbours initial)])
- where neighbours' v'
-         | v' /= initial = neighbours v'
-         | otherwise = [] -- to avoid loop
-         
-         
+reachableList initial neighbours = reachable 
+  where
+    reachable = search initial []
+
+    search v visited = foldList (\next acc -> if elem next acc then acc else search next acc)
+                           (v : visited)
+                           (neighbours v)
+
+
 isGraphClosed :: Eq a => a -> (a -> [a]) -> (a -> Bool) -> Bool
 isGraphClosed initial neighbours isOk = allList isOk (reachableList initial neighbours)
 
@@ -207,15 +209,15 @@ unique (x:xs)
   
   
 isClosed :: Maze -> Bool
-isClosed (Maze initCoord maze) = isSteppable (Maze initCoord maze) initCoord
-  && isGraphClosed initCoord (neighbours (Maze initCoord maze)) (\x -> maze x /= Blank)
+isClosed maze@(Maze c m) = isSteppable maze c
+  && isGraphClosed c (neighbours maze) (\x -> m x /= Blank)
 
 isSane :: Maze -> Bool
-isSane (Maze initCoord maze) = storages >= boxes where
-   storages = length (filterList (== Storage) [maze pos 
-     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))])
-   boxes = length (filterList (== Box) [maze pos 
-     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))])
+isSane maze@(Maze c m) = storages >= boxes where
+   storages = length (filterList (== Storage) [m pos 
+     | pos <- unique (reachableList c (neighbours maze))])
+   boxes = length (filterList (== Box) [m pos 
+     | pos <- unique (reachableList c (neighbours maze))])
 
 
 pictureOfBools :: [Bool] -> Picture
@@ -233,15 +235,22 @@ pictureOfBools xs = translated (-fromIntegral k /2) (fromIntegral k) (go 0 xs)
 
         pictureOfBool True =  colored green (solidCircle 0.4)
         pictureOfBool False = colored red   (solidCircle 0.4)
+
+
+
+closedMazes :: Picture
+closedMazes = pictureOfBools (mapList isClosed (badMazes ++ mazes))
+
+saneMazes :: Picture
+saneMazes = pictureOfBools (mapList isSane (badMazes ++ mazes))
+
         
 --main :: Program
---main = drawingOf(pictureOfBools (map even [1..49::Int]))
--- main = drawingOf()
+--a = reachableList c (neighbours properMaze1) where (Maze c m) = properMaze1
+--main = drawingOf(saneMazes)
 
 
 ---------------------    ETAP 5    ---------------------
-
--- TODO
 
 
 player1 :: Picture
@@ -295,9 +304,6 @@ drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
     | x <- [-10 .. 10], y <- [-10 .. 10]])
 
 
-
-
--- State :: <list of mazes> <nr of maze> <actual coord> <dir> <boxes>
 draw :: State -> Picture
 draw (S [] _ _ _ _) = winScreen
 draw state@(S mazes nr (C x y) dir boxes)
@@ -421,6 +427,7 @@ initInteraction :: Interaction State
 initInteraction = Interaction (initialState mazes 1) handleTime handleEvent draw
 
 main :: Program
-main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
+--main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
+main = drawingOf (drawMaze properMaze2)
 
 
