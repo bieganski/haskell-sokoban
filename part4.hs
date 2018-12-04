@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-} 
 
 import CodeWorld
+import qualified Data.Text as TXT
 
-main :: Program
 type Program = IO ()
 
 
@@ -40,7 +40,7 @@ nextPos (C x y) L = C (x - 1) y
 
 ---------------------    ETAP 0    ---------------------
 
-data Maze = Maze Coord (Coord -> Tile) 
+data Maze = Maze Coord (Coord -> Tile)
 
 properMaze1 :: Maze
 properMaze1 = Maze start fun where
@@ -96,7 +96,7 @@ badMaze2 = Maze start fun where
     | abs x == 3 || abs y == 3 = Wall
     | x == 2 && y == 0         = Storage
     | x == 2 && y == (-2)      = Box
-    | otherwise = Ground
+    | otherwise                = Ground
     
     
 mazes :: [Maze]
@@ -110,6 +110,10 @@ badMazes = [badMaze1, badMaze2]
 
 elemList :: Eq a => a -> [a] -> Bool
 elemList el lst = any (==True) (map (==el) lst)
+
+
+--elemList el lst = foldList (\a b -> if a ) False lst
+
 
 appendList :: [a] -> [a] -> [a]
 appendList l1 l2 = foldList (\el lst -> el:lst) l2 l1
@@ -165,7 +169,6 @@ foldList _ startWith [] = startWith
 
 -- with repeatings
 reachableList :: Eq a => a -> (a -> [a]) -> [a]
-reachableList initial [] = [initial]
 reachableList initial neighbours = 
  initial : (foldList (\l1 l2 -> l1 ++ l2) [] [reachableList v neighbours' | v <- (neighbours initial)])
  where neighbours' v'
@@ -194,9 +197,9 @@ isSteppable :: Maze -> Coord -> Bool
 isSteppable (Maze _ maze) c = elem (maze c) steppableTiles
 
 neighbours :: Maze -> Coord -> [Coord]
-neighbours m c = filter (\x -> isStepable m x) [nextPos c dir | dir <- [R ..]]
+neighbours m c = filter (\x -> isSteppable m x) [nextPos c dir | dir <- [R ..]]
 
-unique :: [a] -> [a]
+unique :: Eq a => [a] -> [a]
 unique [] = []
 unique (x:xs)
   | elem x xs = unique xs
@@ -209,10 +212,10 @@ isClosed (Maze initCoord maze) = isSteppable (Maze initCoord maze) initCoord
 
 isSane :: Maze -> Bool
 isSane (Maze initCoord maze) = storages >= boxes where
-   storages = length filterList (== Storage) [maze pos 
-     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))]
-   storages = length filterList (== Box) [maze pos 
-     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))]
+   storages = length (filterList (== Storage) [maze pos 
+     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))])
+   boxes = length (filterList (== Box) [maze pos 
+     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))])
 
 
 pictureOfBools :: [Bool] -> Picture
@@ -231,8 +234,9 @@ pictureOfBools xs = translated (-fromIntegral k /2) (fromIntegral k) (go 0 xs)
         pictureOfBool True =  colored green (solidCircle 0.4)
         pictureOfBool False = colored red   (solidCircle 0.4)
         
-main :: IO()
-main = drawingOf(pictureOfBools (map even [1..49::Int]))
+--main :: Program
+--main = drawingOf(pictureOfBools (map even [1..49::Int]))
+-- main = drawingOf()
 
 
 ---------------------    ETAP 5    ---------------------
@@ -249,62 +253,82 @@ player2 R = rotated (3*pi/2) player1
 player2 L = rotated (pi/2) player1
 player2 U = player1
 
-data State = S Coord Direction [Coord] deriving Eq
+data State = S [Maze] Integer Coord Direction [Coord]
+-- State :: <list of mazes> <nr of maze> <actual coord> <dir> <boxes> 
+instance Eq State 
+  where S mazes nr pos d boxes == S mazes' nr' pos' d' boxes'
+          = nr == nr' && d == d' && boxes == boxes' && pos == pos'
 
-_init_boxes :: [Coord]
-_init_boxes = [(C x y) | x <- [-5..5], y <- [-5..5], maze(C x y) == Box]
+listReachableObjects :: Tile -> Maze -> [Coord]
+listReachableObjects t (Maze c m) = filter types (unique reachable)
+  where types c = m c == t
+        reachable = reachableList c (neighbours (Maze c m))
+  
+initBoxes :: Maze -> [Coord]
+initBoxes m = listReachableObjects Box m
 
-initialState :: State
-initialState = S (C 1 (-2)) L _init_boxes
+storages :: Maze -> [Coord]
+storages m = listReachableObjects Storage m
 
 
-type Maze = Coord -> Tile
+initialState :: [Maze] -> Integer -> State
+initialState mazes mazeNr = S mazes mazeNr initCoord L (initBoxes (nth mazes mazeNr))
+  where Maze initCoord _ = nth mazes mazeNr
 
-removeBoxes :: Maze -> Coord -> Tile
-removeBoxes m = f . m where f = \t -> if t == Box then Ground else t
+
+removeBoxes :: Maze -> Maze
+removeBoxes maze@(Maze c m) = (Maze c fun) 
+  where fun c = if elem c (initBoxes maze) then Ground else m c  
 
 
 addBoxes :: [Coord] -> Maze -> Maze
-addBoxes l m c = (f . m) c where f = if elem c l then \_ -> Box else id
+addBoxes boxes (Maze c m) = (Maze c m') 
+  where m' c = if elem c boxes then Box else m c
+        
 
-
-actualMaze :: State -> Maze -> Maze
-actualMaze (S _ _ cc) m = addBoxes cc (removeBoxes m)
+actualMaze :: State -> Maze
+actualMaze (S mazes nr _ _ boxes) = addBoxes boxes (removeBoxes (nth mazes nr))
 
 
 drawMaze :: Maze -> Picture
-drawMaze m = pictures ([atCoord (C x y) (drawTile (m (C x y)))
-    | x <- [-5 .. 5], y <- [-5 .. 5]])
+drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
+    | x <- [-10 .. 10], y <- [-10 .. 10]])
 
 
+
+
+-- State :: <list of mazes> <nr of maze> <actual coord> <dir> <boxes>
 draw :: State -> Picture
-draw (S (C x y) d cc) = if isWinning (S (C x y) d cc) then winScreen else pictures(
-  [translated (fromIntegral x) (fromIntegral y) (player2 d)] 
-  ++ [drawMaze (actualMaze (S (C x y) d cc) maze)])
+draw (S [] _ _ _ _) = winScreen
+draw state@(S mazes nr (C x y) dir boxes)
+  = pictures([translated (fromIntegral x) (fromIntegral y) (player2 dir)] 
+  ++ [drawMaze (actualMaze state)])
 
 
 permittedMove :: State -> Direction -> Bool
-permittedMove (S c pl_d cc) d
-    | elem (nextPos c d) cc = 
-        if elem (actMaze  (nextPos (nextPos c d) d)) [Storage, Ground] 
-        then True else False
-    | elem (actMaze (nextPos c d)) [Storage, Ground] = True
+permittedMove state@(S mazes nr pos act_d boxes) d
+    | elem (nextPos pos d) boxes = elem (m (nextPos pos d)) [Storage, Ground] 
+    | elem (m (nextPos pos d)) [Storage, Ground] = True
     | otherwise = False
-    where actMaze = actualMaze (S c pl_d cc) maze
-
+    where actMaze@(Maze _ m) = actualMaze state
 
 
 isWinning :: State -> Bool
-isWinning (S _ _ cc) = all (==Storage) (map (maze) cc)
+isWinning (S mazes nr pos dir boxes) = all (==Storage) (map maze boxes)
+  where Maze _ maze = nth mazes nr
 
 
+
+    
 makeMove :: State -> Direction -> State
-makeMove (S c pl_d cc) d
-    | not (permittedMove (S c pl_d cc) d) = S c d cc
-    | elem (nextPos c d) cc = S (nextPos c d) d ([el | el <- cc, el /= (nextPos c d)] ++ [(nextPos (nextPos c d) d)])
-    | elem (actMaze (nextPos c d)) [Storage, Ground] = S (nextPos c d) d cc
-    | otherwise = S c d cc
-    where actMaze = actualMaze (S c pl_d cc) maze
+makeMove state@(S mazes nr pos act_d boxes) d
+    | not (permittedMove state d) = state
+    | elem (nextPos pos d) boxes 
+      = S mazes nr (nextPos pos d) d ([el | el <- boxes, el /= (nextPos pos d)] ++ [(nextPos (nextPos pos d) d)])
+    | elem (m (nextPos pos d)) [Storage, Ground] = S mazes nr (nextPos pos d) d boxes
+    | otherwise = S mazes nr pos d boxes
+    where actMaze@(Maze _ m) = actualMaze (S mazes nr pos act_d boxes)
+
 
 
 handleEvent :: Event -> State -> State
@@ -325,11 +349,16 @@ data GameState world = StartScreen | Running world deriving Eq
 
 startScreen :: Picture
 startScreen = pictures [scaled 3 3 (lettering "Sokoban!"), 
-    translated 0 (-3) (lettering "press 'Space' to start game!")]
+    translated 0 (-3) (lettering "naciśnij spację by zacząć grę!")]
 
 winScreen :: Picture
-winScreen = pictures [scaled 3 3 (lettering "You win!"), 
-    translated 0 (-3) (lettering "congratulations!")]
+winScreen = pictures [scaled 3 3 (lettering "Wygrałeś!"), 
+    translated 0 (-3) (lettering "Gratulacje!")]
+
+levelWinScreen :: Integer -> Picture
+levelWinScreen n = pictures [scaled 3 3 _text]
+  where _text = lettering (TXT.append ("Poziom ukończony, liczba ruchów: ") 
+                (TXT.pack (show n)))
 
 
 data Interaction world = Interaction
@@ -384,14 +413,14 @@ withUndo (Interaction w t_func e_func d_func)
     d_func' (WithUndo w _) = d_func w
         
 
-runInteraction :: Interaction s -> IO ()
+runInteraction :: Interaction s -> Program
 runInteraction (Interaction w t e d) = interactionOf w t e d
 
 
 initInteraction :: Interaction State
-initInteraction = Interaction initialState handleTime handleEvent draw
+initInteraction = Interaction (initialState mazes 1) handleTime handleEvent draw
 
-
+main :: Program
 main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
 
 
