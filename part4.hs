@@ -29,7 +29,7 @@ data Coord = C Integer Integer deriving (Eq, Show)
 atCoord :: Coord -> Picture -> Picture
 atCoord (C x y) pic = translated (fromIntegral x) (fromIntegral y) pic
 
-data Direction = R | U | L | D deriving (Eq, Show)
+data Direction = R | U | L | D deriving (Eq, Show, Enum)
 
 nextPos :: Coord -> Direction -> Coord
 nextPos (C x y) U = C x (y + 1)
@@ -37,6 +37,8 @@ nextPos (C x y) D = C x (y - 1)
 nextPos (C x y) R = C (x + 1) y
 nextPos (C x y) L = C (x - 1) y
 
+
+---------------------    ETAP 0    ---------------------
 
 data Maze = Maze Coord (Coord -> Tile) 
 
@@ -103,6 +105,9 @@ mazes = [properMaze1, properMaze2]
 badMazes :: [Maze]
 badMazes = [badMaze1, badMaze2]
 
+
+---------------------    ETAP 1    ---------------------
+
 elemList :: Eq a => a -> [a] -> Bool
 elemList el lst = any (==True) (map (==el) lst)
 
@@ -136,6 +141,103 @@ foldList fun startWith (x:xs) = fun x (foldList fun startWith xs)
 foldList _ startWith [] = startWith
 
 
+---------------------    ETAP 2    ---------------------
+
+
+--isGraphClosed :: Eq a => a -> (a -> [a]) -> (a -> Bool) -> Bool
+--isGraphClosed initial neighbours isOk = isOk initial 
+--  && andList [isGraphClosed v neighbours' isOk | v <- (neighbours initial)]
+--  where neighbours' v'
+--         | v' /= v = neighbours v'
+--         | otherwise = []
+
+
+--reachable :: Eq a => a -> a -> (a -> [a]) -> Bool
+--reachable v initial neighbours = (v == initial) 
+--  || reachable [v actual neighbours' | actual <- (neighbours initial)]
+--  where neighbours' v'
+--         | v' /= initial = neighbours v'
+--         | otherwise = []
+
+
+
+-- edit -------------------------------------- EDIIIIIIT
+
+-- with repeatings
+reachableList :: Eq a => a -> (a -> [a]) -> [a]
+reachableList initial [] = [initial]
+reachableList initial neighbours = 
+ initial : (foldList (\l1 l2 -> l1 ++ l2) [] [reachableList v neighbours' | v <- (neighbours initial)])
+ where neighbours' v'
+         | v' /= initial = neighbours v'
+         | otherwise = [] -- to avoid loop
+         
+         
+isGraphClosed :: Eq a => a -> (a -> [a]) -> (a -> Bool) -> Bool
+isGraphClosed initial neighbours isOk = allList isOk (reachableList initial neighbours)
+
+
+reachable :: Eq a => a -> a -> (a -> [a]) -> Bool
+reachable v initial neighbours = elemList v (reachableList initial neighbours)
+
+
+allReachable :: Eq a => [a] -> a -> (a -> [a]) -> Bool
+allReachable vs initial neighbours = allList (\v -> reachable v initial neighbours) vs
+
+
+---------------------    ETAP 4    ---------------------
+
+steppableTiles :: [Tile]
+steppableTiles = [Ground, Storage]
+
+isSteppable :: Maze -> Coord -> Bool
+isSteppable (Maze _ maze) c = elem (maze c) steppableTiles
+
+neighbours :: Maze -> Coord -> [Coord]
+neighbours m c = filter (\x -> isStepable m x) [nextPos c dir | dir <- [R ..]]
+
+unique :: [a] -> [a]
+unique [] = []
+unique (x:xs)
+  | elem x xs = unique xs
+  | otherwise = x : unique xs
+  
+  
+isClosed :: Maze -> Bool
+isClosed (Maze initCoord maze) = isSteppable (Maze initCoord maze) initCoord
+  && isGraphClosed initCoord (neighbours (Maze initCoord maze)) (\x -> maze x /= Blank)
+
+isSane :: Maze -> Bool
+isSane (Maze initCoord maze) = storages >= boxes where
+   storages = length filterList (== Storage) [maze pos 
+     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))]
+   storages = length filterList (== Box) [maze pos 
+     | pos <- unique (reachableList initCoord (neighbours (Maze initCoord maze)))]
+
+
+pictureOfBools :: [Bool] -> Picture
+pictureOfBools xs = translated (-fromIntegral k /2) (fromIntegral k) (go 0 xs)
+  where n = length xs
+        k = findK 0 -- k is the integer square of n
+        findK i | i * i >= n = i
+                | otherwise  = findK (i+1)
+        go _ [] = blank
+        go i (b:bs) =
+          translated (fromIntegral (i `mod` k))
+                     (-fromIntegral (i `div` k))
+                     (pictureOfBool b)
+          & go (i+1) bs
+
+        pictureOfBool True =  colored green (solidCircle 0.4)
+        pictureOfBool False = colored red   (solidCircle 0.4)
+        
+main :: IO()
+main = drawingOf(pictureOfBools (map even [1..49::Int]))
+
+
+---------------------    ETAP 5    ---------------------
+
+-- TODO
 
 
 player1 :: Picture
