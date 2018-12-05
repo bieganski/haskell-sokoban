@@ -15,7 +15,7 @@ storage_pict = rectangle 1 1 & colored green (solidCircle 0.3)
 blank_pict = rectangle 1 1
 
 
-data Tile = Wall | Ground | Storage | Box | Blank deriving Eq
+data Tile = Wall | Ground | Storage | Box | Blank deriving (Eq, Show)
 
 drawTile :: Tile -> Picture
 drawTile Wall    = wall_pict
@@ -147,27 +147,6 @@ foldList _ startWith [] = startWith
 
 ---------------------    ETAP 2    ---------------------
 
-
---isGraphClosed :: Eq a => a -> (a -> [a]) -> (a -> Bool) -> Bool
---isGraphClosed initial neighbours isOk = isOk initial 
---  && andList [isGraphClosed v neighbours' isOk | v <- (neighbours initial)]
---  where neighbours' v'
---         | v' /= v = neighbours v'
---         | otherwise = []
-
-
---reachable :: Eq a => a -> a -> (a -> [a]) -> Bool
---reachable v initial neighbours = (v == initial) 
---  || reachable [v actual neighbours' | actual <- (neighbours initial)]
---  where neighbours' v'
---         | v' /= initial = neighbours v'
---         | otherwise = []
-
-
-
--- edit -------------------------------------- EDIIIIIIT
-
-
 reachableList :: Eq a => a -> (a -> [a]) -> [a]
 reachableList initial neighbours = reachable 
   where
@@ -269,12 +248,14 @@ instance Eq State
           = nr == nr' && d == d' && boxes == boxes' && pos == pos'
 
 listReachableObjects :: Tile -> Maze -> [Coord]
-listReachableObjects t (Maze c m) = filter types (unique reachable)
+listReachableObjects t (Maze c m) = filter types reachable
   where types c = m c == t
         reachable = reachableList c (neighbours (Maze c m))
   
+
+
 initBoxes :: Maze -> [Coord]
-initBoxes m = listReachableObjects Box m
+initBoxes (Maze c m) = [(C x y) | x <- [-10..10], y <- [-10..10], m (C x y) == Box]
 
 storages :: Maze -> [Coord]
 storages m = listReachableObjects Storage m
@@ -427,7 +408,6 @@ initInteraction :: Interaction State
 initInteraction = Interaction (initialState mazes 1) handleTime handleEvent draw
 
 main :: Program
---main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
-main = drawingOf (drawMaze properMaze2)
-
-
+main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
+-- main = drawingOf (drawMaze properMaze1)
+-- main = print (initBoxes properMaze1)
