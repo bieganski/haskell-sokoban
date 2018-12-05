@@ -111,10 +111,6 @@ badMazes = [badMaze1, badMaze2]
 elemList :: Eq a => a -> [a] -> Bool
 elemList el lst = any (==True) (map (==el) lst)
 
-
---elemList el lst = foldList (\a b -> if a ) False lst
-
-
 appendList :: [a] -> [a] -> [a]
 appendList l1 l2 = foldList (\el lst -> el:lst) l2 l1
 
@@ -180,13 +176,6 @@ isSteppable (Maze _ maze) c = elem (maze c) steppableTiles
 neighbours :: Maze -> Coord -> [Coord]
 neighbours m c = filter (\x -> isSteppable m x) [nextPos c dir | dir <- [R ..]]
 
-unique :: Eq a => [a] -> [a]
-unique [] = []
-unique (x:xs)
-  | elem x xs = unique xs
-  | otherwise = x : unique xs
-  
-  
 isClosed :: Maze -> Bool
 isClosed maze@(Maze c m) = isSteppable maze c
   && isGraphClosed c (neighbours maze) (\x -> m x /= Blank)
@@ -194,9 +183,9 @@ isClosed maze@(Maze c m) = isSteppable maze c
 isSane :: Maze -> Bool
 isSane maze@(Maze c m) = storages >= boxes where
    storages = length (filterList (== Storage) [m pos 
-     | pos <- unique (reachableList c (neighbours maze))])
+     | pos <- reachableList c (neighbours maze)])
    boxes = length (filterList (== Box) [m pos 
-     | pos <- unique (reachableList c (neighbours maze))])
+     | pos <- reachableList c (neighbours maze)])
 
 
 pictureOfBools :: [Bool] -> Picture
@@ -254,8 +243,11 @@ listReachableObjects t (Maze c m) = filter types reachable
   
 
 
+-- TODO brac tylko osiagalne
 initBoxes :: Maze -> [Coord]
-initBoxes (Maze c m) = [(C x y) | x <- [-10..10], y <- [-10..10], m (C x y) == Box]
+initBoxes (Maze c m) = [(C x y) | x <- [-7..7], y <- [-7..7], m (C x y) == Box]
+
+lol = initBoxes properMaze2
 
 storages :: Maze -> [Coord]
 storages m = listReachableObjects Storage m
@@ -263,12 +255,12 @@ storages m = listReachableObjects Storage m
 
 initialState :: [Maze] -> Integer -> State
 initialState mazes mazeNr = S mazes mazeNr initCoord L (initBoxes (nth mazes mazeNr))
-  where Maze initCoord _ = nth mazes mazeNr
+    where Maze initCoord _ = nth mazes mazeNr
 
 
 removeBoxes :: Maze -> Maze
-removeBoxes maze@(Maze c m) = (Maze c fun) 
-  where fun c = if elem c (initBoxes maze) then Ground else m c  
+removeBoxes maze@(Maze c m) = (Maze c fun)
+  where fun c = if m c == Box then Ground else m c  
 
 
 addBoxes :: [Coord] -> Maze -> Maze
@@ -279,10 +271,9 @@ addBoxes boxes (Maze c m) = (Maze c m')
 actualMaze :: State -> Maze
 actualMaze (S mazes nr _ _ boxes) = addBoxes boxes (removeBoxes (nth mazes nr))
 
-
 drawMaze :: Maze -> Picture
 drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
-    | x <- [-10 .. 10], y <- [-10 .. 10]])
+    | x <- [-7 .. 7], y <- [-7 .. 7]])
 
 
 draw :: State -> Picture
@@ -290,32 +281,29 @@ draw (S [] _ _ _ _) = winScreen
 draw state@(S mazes nr (C x y) dir boxes)
   = pictures([translated (fromIntegral x) (fromIntegral y) (player2 dir)] 
   ++ [drawMaze (actualMaze state)])
-
+  -- ++ [drawMaze (nth mazes 1)])
 
 permittedMove :: State -> Direction -> Bool
 permittedMove state@(S mazes nr pos act_d boxes) d
-    | elem (nextPos pos d) boxes = elem (m (nextPos pos d)) [Storage, Ground] 
-    | elem (m (nextPos pos d)) [Storage, Ground] = True
+    | elem (nextPos pos d) boxes = elem (m (nextPos (nextPos pos d) d)) steppableTiles
+    | elem (m (nextPos pos d)) steppableTiles = True
     | otherwise = False
-    where actMaze@(Maze _ m) = actualMaze state
+    where (Maze _ m) = actualMaze state
 
 
-isWinning :: State -> Bool
-isWinning (S mazes nr pos dir boxes) = all (==Storage) (map maze boxes)
-  where Maze _ maze = nth mazes nr
-
-
-
-    
 makeMove :: State -> Direction -> State
 makeMove state@(S mazes nr pos act_d boxes) d
     | not (permittedMove state d) = state
     | elem (nextPos pos d) boxes 
       = S mazes nr (nextPos pos d) d ([el | el <- boxes, el /= (nextPos pos d)] ++ [(nextPos (nextPos pos d) d)])
-    | elem (m (nextPos pos d)) [Storage, Ground] = S mazes nr (nextPos pos d) d boxes
+    | elem (m (nextPos pos d)) steppableTiles = S mazes nr (nextPos pos d) d boxes
     | otherwise = S mazes nr pos d boxes
-    where actMaze@(Maze _ m) = actualMaze (S mazes nr pos act_d boxes)
+    where (Maze _ m) = actualMaze state
 
+
+isWinning :: State -> Bool
+isWinning (S mazes nr pos dir boxes) = all (==Storage) (map maze boxes)
+  where Maze _ maze = nth mazes nr
 
 
 handleEvent :: Event -> State -> State
@@ -409,5 +397,10 @@ initInteraction = Interaction (initialState mazes 1) handleTime handleEvent draw
 
 main :: Program
 main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
--- main = drawingOf (drawMaze properMaze1)
--- main = print (initBoxes properMaze1)
+-- main = runInteraction initInteraction
+-- main = drawingOf (drawMaze (addBoxes (initBoxes properMaze2)(removeBoxes properMaze2)))
+-- main = drawingOf (pictures([coordinatePlane, drawMaze properMaze2]))
+--main = print (reachableList (C 1 (-2)) (neighbours properMaze2))
+-- main = print (initBoxes properMaze2)
+
+
