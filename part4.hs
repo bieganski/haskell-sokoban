@@ -6,8 +6,10 @@ import qualified Data.Text as TXT
 type Program = IO ()
 
 
-_obj, wall_pict, box_pict, ground_pict, storage_pict, blank_pict :: Picture
+_obj :: Picture
 _obj = solidRectangle 1 1
+
+wall_pict, box_pict, ground_pict, storage_pict, blank_pict :: Picture
 wall_pict = colored red _obj
 box_pict = colored brown _obj
 ground_pict = colored (light brown) _obj
@@ -205,17 +207,11 @@ pictureOfBools xs = translated (-fromIntegral k /2) (fromIntegral k) (go 0 xs)
         pictureOfBool False = colored red   (solidCircle 0.4)
 
 
-
 closedMazes :: Picture
 closedMazes = pictureOfBools (mapList isClosed (badMazes ++ mazes))
 
 saneMazes :: Picture
 saneMazes = pictureOfBools (mapList isSane (badMazes ++ mazes))
-
-        
---main :: Program
---a = reachableList c (neighbours properMaze1) where (Maze c m) = properMaze1
---main = drawingOf(saneMazes)
 
 
 ---------------------    ETAP 5    ---------------------
@@ -230,32 +226,33 @@ player2 R = rotated (3*pi/2) player1
 player2 L = rotated (pi/2) player1
 player2 U = player1
 
-data State = S [Maze] Integer Coord Direction [Coord]
--- State :: <list of mazes> <nr of maze> <actual coord> <dir> <boxes> 
+
+-- State :: <list of mazes> <actual coord> <dir> <boxes> <moves>
+data State = S [Maze] Coord Direction [Coord] Integer
+
 instance Eq State 
   where S mazes nr pos d boxes == S mazes' nr' pos' d' boxes'
           = nr == nr' && d == d' && boxes == boxes' && pos == pos'
+
 
 listReachableObjects :: Tile -> Maze -> [Coord]
 listReachableObjects t (Maze c m) = filter types reachable
   where types c = m c == t
         reachable = reachableList c (neighbours (Maze c m))
   
-
-
+  
 -- TODO brac tylko osiagalne
 initBoxes :: Maze -> [Coord]
 initBoxes (Maze c m) = [(C x y) | x <- [-7..7], y <- [-7..7], m (C x y) == Box]
 
-lol = initBoxes properMaze2
 
 storages :: Maze -> [Coord]
 storages m = listReachableObjects Storage m
 
 
-initialState :: [Maze] -> Integer -> State
-initialState mazes mazeNr = S mazes mazeNr initCoord L (initBoxes (nth mazes mazeNr))
-    where Maze initCoord _ = nth mazes mazeNr
+initialState :: [Maze] -> State
+initialState [] = S [] (C 0 0) L [] 0
+initialState (m:mazes) = S (m:mazes) initCoord L (initBoxes m) 0 where Maze initCoord _ = m
 
 
 removeBoxes :: Maze -> Maze
@@ -269,7 +266,7 @@ addBoxes boxes (Maze c m) = (Maze c m')
         
 
 actualMaze :: State -> Maze
-actualMaze (S mazes nr _ _ boxes) = addBoxes boxes (removeBoxes (nth mazes nr))
+actualMaze (S (m:mazes) _ _ boxes _) = addBoxes boxes (removeBoxes m)
 
 drawMaze :: Maze -> Picture
 drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
@@ -278,13 +275,13 @@ drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
 
 draw :: State -> Picture
 draw (S [] _ _ _ _) = winScreen
-draw state@(S mazes nr (C x y) dir boxes)
-  = pictures([translated (fromIntegral x) (fromIntegral y) (player2 dir)] 
-  ++ [drawMaze (actualMaze state)])
-  -- ++ [drawMaze (nth mazes 1)])
+draw state@(S mazes (C x y) dir boxes mov)
+  | isWinning state = levelWinScreen mov
+  | otherwise = pictures([translated (fromIntegral x) (fromIntegral y) (player2 dir)] 
+    ++ [drawMaze (actualMaze state)])
 
 permittedMove :: State -> Direction -> Bool
-permittedMove state@(S mazes nr pos act_d boxes) d
+permittedMove state@(S mazes pos act_d boxes _) d
     | elem (nextPos pos d) boxes = elem (m (nextPos (nextPos pos d) d)) steppableTiles
     | elem (m (nextPos pos d)) steppableTiles = True
     | otherwise = False
@@ -292,29 +289,35 @@ permittedMove state@(S mazes nr pos act_d boxes) d
 
 
 makeMove :: State -> Direction -> State
-makeMove state@(S mazes nr pos act_d boxes) d
-    | not (permittedMove state d) = state
+makeMove state@(S mazes pos act_d boxes movs) d
+    | not (permittedMove state d) = (S mazes pos d boxes movs)
     | elem (nextPos pos d) boxes 
-      = S mazes nr (nextPos pos d) d ([el | el <- boxes, el /= (nextPos pos d)] ++ [(nextPos (nextPos pos d) d)])
-    | elem (m (nextPos pos d)) steppableTiles = S mazes nr (nextPos pos d) d boxes
-    | otherwise = S mazes nr pos d boxes
+      = S mazes (nextPos pos d) d 
+        ([el | el <- boxes, el /= (nextPos pos d)] ++ [(nextPos (nextPos pos d) d)]) (movs+1)
+    | elem (m (nextPos pos d)) steppableTiles = S mazes (nextPos pos d) d boxes (movs+1)
+    | otherwise = S mazes pos d boxes movs
     where (Maze _ m) = actualMaze state
 
 
+
+-- TODO is winning z pusta lista maze -------TODOTODOTODO moze nie trzeba
 isWinning :: State -> Bool
-isWinning (S mazes nr pos dir boxes) = all (==Storage) (map maze boxes)
-  where Maze _ maze = nth mazes nr
+isWinning (S (m:_) _ _ boxes _) = all (==Storage) (map mm boxes) where Maze _ mm = m
 
 
 handleEvent :: Event -> State -> State
-handleEvent (KeyPress key) s
-    | isWinning s = s
+handleEvent (KeyPress key) s@(S (m:mazes) pos act_d boxes movs)
+    | isWinning s = if key == " " then nextLevel s else s
     | key == "Up" = makeMove s U
     | key == "Down" = makeMove s D
     | key == "Right" = makeMove s R
     | key == "Left" = makeMove s L
+    where nextLevel (S (m:mazes) _ _ _ _) = case mazes of
+            [] -> (S [] (C 0 0) L [] 0)
+            mm:_ -> initialState mazes
+    
 handleEvent _ s = s
-
+-- ---------------------------------- OTODODODOOTTOOTOOTTO
 
 handleTime :: Double -> world -> world
 handleTime _ w = w
@@ -330,8 +333,9 @@ winScreen :: Picture
 winScreen = pictures [scaled 3 3 (lettering "Wygrałeś!"), 
     translated 0 (-3) (lettering "Gratulacje!")]
 
+
 levelWinScreen :: Integer -> Picture
-levelWinScreen n = pictures [scaled 3 3 _text]
+levelWinScreen n = pictures [_text]
   where _text = lettering (TXT.append ("Poziom ukończony, liczba ruchów: ") 
                 (TXT.pack (show n)))
 
@@ -393,7 +397,7 @@ runInteraction (Interaction w t e d) = interactionOf w t e d
 
 
 initInteraction :: Interaction State
-initInteraction = Interaction (initialState mazes 1) handleTime handleEvent draw
+initInteraction = Interaction (initialState mazes) handleTime handleEvent draw
 
 main :: Program
 main = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
