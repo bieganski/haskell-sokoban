@@ -147,25 +147,25 @@ foldList _ startWith [] = startWith
 ---------------------    ETAP 2    ---------------------
 
 reachableList :: Eq a => a -> (a -> [a]) -> [a]
-reachableList initial neighbours = reachable 
+reachableList initial neighs = reachList
   where
-    reachable = search initial []
+    reachList = search initial []
 
     search v visited = foldList (\next acc -> if elem next acc then acc else search next acc)
                            (v : visited)
-                           (neighbours v)
+                           (neighs v)
 
 
 isGraphClosed :: Eq a => a -> (a -> [a]) -> (a -> Bool) -> Bool
-isGraphClosed initial neighbours isOk = allList isOk (reachableList initial neighbours)
+isGraphClosed initial neighs isOk = allList isOk (reachableList initial neighs)
 
 
 reachable :: Eq a => a -> a -> (a -> [a]) -> Bool
-reachable v initial neighbours = elemList v (reachableList initial neighbours)
+reachable v initial neighs = elemList v (reachableList initial neighs)
 
 
 allReachable :: Eq a => [a] -> a -> (a -> [a]) -> Bool
-allReachable vs initial neighbours = allList (\v -> reachable v initial neighbours) vs
+allReachable vs initial neighs = allList (\v -> reachable v initial neighs) vs
 
 
 ---------------------    ETAP 4    ---------------------
@@ -186,7 +186,7 @@ isClosed maze@(Maze c m) = isSteppable maze c
 
 
 isSane :: Maze -> Bool
-isSane maze@(Maze c m) = stors >= boxes where
+isSane maze = stors >= boxes where
    stors = length (storages (removeBoxes maze))
    boxes = length (initialBoxes maze)
 
@@ -216,9 +216,9 @@ saneMazes = pictureOfBools (mapList isSane (badMazes ++ mazes))
 
 
 etap4 :: Picture
-etap4 = (translated 5 0 (text "Sane"))
+etap4 = (translated 5 0 (lettering "Sane"))
       & (translated 5 0 saneMazes)
-      & (translated (-5) 0 (text "Closed"))
+      & (translated (-5) 0 (lettering "Closed"))
       & (translated (-5) 0 closedMazes)
       
       
@@ -240,18 +240,20 @@ data State = S [Maze] Coord Direction [Coord] Integer
 
 instance Eq State 
   where S mazes nr pos d boxes == S mazes' nr' pos' d' boxes'
-          = nr == nr' && d == d' && boxes == boxes' && pos == pos'
+          = length mazes == length mazes' && nr == nr' && d == d' 
+          && boxes == boxes' && pos == pos'
 
 
 listReachableObjects :: Tile -> Maze -> [Coord]
-listReachableObjects t (Maze c m) = filter types reachable
+listReachableObjects t (Maze c m) = filter types reachList
   where types c = m c == t
-        reachable = reachableList c (neighbours (Maze c m))
+        reachList = reachableList c (neighbours (Maze c m))
   
 
 initialBoxes :: Maze -> [Coord]
 initialBoxes (Maze c m) = [x | x <- reachList, m x == Box]
   where reachList = reachableList c (neighbours (removeBoxes (Maze c m)))
+
 
 storages :: Maze -> [Coord]
 storages m = listReachableObjects Storage m
@@ -263,7 +265,7 @@ initialState (m:mazes) = S (m:mazes) initCoord L (initialBoxes m) 0 where Maze i
 
 
 removeBoxes :: Maze -> Maze
-removeBoxes maze@(Maze c m) = (Maze c fun)
+removeBoxes (Maze c m) = (Maze c fun)
   where fun c = if m c == Box then Ground else m c  
 
 
@@ -273,7 +275,9 @@ addBoxes boxes (Maze c m) = (Maze c m')
         
 
 actualMaze :: State -> Maze
-actualMaze (S (m:mazes) _ _ boxes _) = addBoxes boxes (removeBoxes m)
+actualMaze (S [] _ _ _ _) = error "'actualMaze' on empty maze list"
+actualMaze (S (m:_) _ _ boxes _) = addBoxes boxes (removeBoxes m)
+
 
 drawMaze :: Maze -> Picture
 drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
@@ -282,13 +286,13 @@ drawMaze (Maze _ m) = pictures ([atCoord (C x y) (drawTile (m (C x y)))
 
 draw :: State -> Picture
 draw (S [] _ _ _ _) = winScreen
-draw state@(S mazes (C x y) dir boxes mov)
+draw state@(S _ (C x y) dir _ mov)
   | isWinning state = levelWinScreen mov
   | otherwise = pictures([translated (fromIntegral x) (fromIntegral y) (player2 dir)] 
     ++ [drawMaze (actualMaze state)])
 
 permittedMove :: State -> Direction -> Bool
-permittedMove state@(S mazes pos act_d boxes _) d
+permittedMove state@(S _ pos _ boxes _) d
     | elem (nextPos pos d) boxes = elem (m (nextPos (nextPos pos d) d)) steppableTiles
     | elem (m (nextPos pos d)) steppableTiles = True
     | otherwise = False
@@ -296,7 +300,7 @@ permittedMove state@(S mazes pos act_d boxes _) d
 
 
 makeMove :: State -> Direction -> State
-makeMove state@(S mazes pos act_d boxes movs) d
+makeMove state@(S mazes pos _ boxes movs) d
     | not (permittedMove state d) = (S mazes pos d boxes movs)
     | elem (nextPos pos d) boxes 
       = S mazes (nextPos pos d) d 
@@ -307,19 +311,21 @@ makeMove state@(S mazes pos act_d boxes movs) d
 
 
 isWinning :: State -> Bool
-isWinning (S (m:_) _ _ boxes _) = all (==Storage) (map mm boxes) where Maze _ mm = m
+isWinning (S [] _ _ _ _) = True
+isWinning (S (m:_) _ _ boxes _) = andList (mapList (==Storage) (mapList mm boxes)) 
+  where Maze _ mm = m
 
 
 handleEvent :: Event -> State -> State
-handleEvent (KeyPress key) s@(S (m:mazes) pos act_d boxes movs)
+handleEvent (KeyPress key) s
     | isWinning s = if key == " " then nextLevel s else s
     | key == "Up" = makeMove s U
     | key == "Down" = makeMove s D
     | key == "Right" = makeMove s R
     | key == "Left" = makeMove s L
-    where nextLevel (S (m:mazes) _ _ _ _) = case mazes of
+    where nextLevel (S mzs _ _ _ _) = case mzs of
             [] -> (S [] (C 0 0) L [] 0)
-            mm:_ -> initialState mazes
+            _:mms -> initialState mms
 handleEvent _ s = s
 
 handleTime :: Double -> world -> world
@@ -407,4 +413,5 @@ etap5 = runInteraction (withUndo (resettable (withStartScreen initInteraction)))
 
 main :: Program
 main = etap5
+-- main = drawingOf etap4
 
